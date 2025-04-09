@@ -1,61 +1,58 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import os
-import tempfile
 import requests
 from io import StringIO
 
-def load_data_from_github(github_url):
+# The raw GitHub URL for your data
+GITHUB_RAW_URL = "https://raw.githubusercontent.com/ashmeetanand13/footy_world/main/df_clean.csv"
+
+def load_data_from_github():
     """
-    Load data directly from GitHub URL
+    Load data directly from the GitHub URL
     
-    Args:
-        github_url: URL to raw GitHub CSV data
-        
     Returns:
-        pandas DataFrame or None if loading fails
+        DataFrame or None: The loaded data or None if an error occurs
     """
     try:
-        response = requests.get(github_url)
-        response.raise_for_status()  # Raise an exception for HTTP errors
-        
-        # Read content into pandas DataFrame
-        content = StringIO(response.text)
-        df = pd.read_csv(content, low_memory=False)
-        
-        return df
+        # Show loading status
+        with st.spinner("Loading data from GitHub..."):
+            # Fetch data from GitHub
+            response = requests.get(GITHUB_RAW_URL)
+            response.raise_for_status()  # Raise exception for HTTP errors
+            
+            # Parse CSV data
+            content = StringIO(response.text)
+            df = pd.read_csv(content, low_memory=False)
+            
+            st.success(f"Successfully loaded data with {df.shape[0]} rows and {df.shape[1]} columns")
+            return df
+    
     except Exception as e:
         st.error(f"Error loading data from GitHub: {str(e)}")
         return None
 
-def load_fbref_data_from_github(github_url=None):
+def process_football_data(df):
     """
-    Process fbref data from GitHub and transform it into the format needed for analysis
+    Process the football data to create league-level metrics
     
     Args:
-        github_url: Optional GitHub URL (uses default if None)
+        df: DataFrame containing the football data
         
     Returns:
-        tuple: (league_level_df, player_level_df, success_message)
+        tuple: (league_level_df, player_level_df)
     """
+    if df is None:
+        return None, None
+    
     try:
-        # Use default GitHub URL if none provided
-        if github_url is None:
-            github_url = "https://github.com/ashmeetanand13/footy_world/blob/main/df_clean.csv"
-        
-        # Load the data
-        df = load_data_from_github(github_url)
-        
-        if df is None:
-            return None, None, "Error: Failed to load data from GitHub"
-        
-        # Check if this is valid fbref data by looking for key columns
+        # Check for required columns
         required_cols = ['Player', 'Competition', 'Squad']
         missing_cols = [col for col in required_cols if col not in df.columns]
         
         if missing_cols:
-            return None, None, f"Error: Missing required columns: {', '.join(missing_cols)}"
+            st.error(f"Missing required columns: {', '.join(missing_cols)}")
+            return None, None
         
         # Extract unique leagues
         leagues = df['Competition'].unique()
@@ -66,7 +63,7 @@ def load_fbref_data_from_github(github_url=None):
         for league in leagues:
             league_df = df[df['Competition'] == league]
             
-            # Skip if too few players (likely not a complete league dataset)
+            # Skip if too few players
             if league_df.shape[0] < 10:
                 continue
                 
@@ -105,12 +102,8 @@ def load_fbref_data_from_github(github_url=None):
             
             # Possession metrics
             if 'Touches Touches' in df.columns:
-                # Estimate possession percentage (normally would come from match data)
-                all_touches = df['Touches Touches'].sum()
-                if all_touches > 0:
-                    league_data['Possession %'] = 50  # Default to 50% since we can't calculate actual possession
-                else:
-                    league_data['Possession %'] = 0
+                # Use 50% as default possession
+                league_data['Possession %'] = 50
                 
                 # Touches in attacking third
                 if 'Touches Att 3rd' in df.columns:
@@ -139,27 +132,24 @@ def load_fbref_data_from_github(github_url=None):
             
             # Corner metrics
             if 'Pass Types CK' in df.columns:
-                # Corners per match (estimate based on average team having ~5 corners per match)
-                # Ideally this would use actual match data
-                avg_team_corners = 5
+                # Corners per match
                 num_teams = league_df['Squad'].nunique()
-                estimated_matches = num_teams * (num_teams - 1) / 2  # Number of matches in a round-robin format
+                estimated_matches = num_teams * (num_teams - 1) / 2
                 
                 if estimated_matches > 0:
                     league_data['Corners Per Match'] = league_df['Pass Types CK'].sum() / estimated_matches
                 else:
-                    league_data['Corners Per Match'] = avg_team_corners
+                    league_data['Corners Per Match'] = 5  # Default value
                 
-                # Corner success rate (estimate - ideally would use actual goal data)
+                # Corner success rate
                 if 'Corner Kicks In' in df.columns:
                     total_corners = league_df['Pass Types CK'].sum()
                     if total_corners > 0:
-                        # Success rate here is defined as the percentage of corners that are delivered "in"
                         league_data['Corner Success Rate (%)'] = 100 * league_df['Corner Kicks In'].sum() / total_corners
                     else:
                         league_data['Corner Success Rate (%)'] = 0
                 
-                # Short corner percentage (estimate)
+                # Short corner percentage
                 if 'Corner Kicks Str' in df.columns:
                     total_corners = league_df['Pass Types CK'].sum()
                     if total_corners > 0:
@@ -167,19 +157,20 @@ def load_fbref_data_from_github(github_url=None):
                     else:
                         league_data['Short Corner %'] = 0
             
-            # Add complete data to our league metrics list
-            if len(league_data) > 5:  # Only add if we have sufficient metrics
+            # Add to metrics list if we have enough data
+            if len(league_data) > 5:
                 league_metrics.append(league_data)
         
-        # Create player-level metrics for position-based analysis
+        # Player-level metrics
         player_cols = ['Player', 'Squad', 'Competition', 'Pos']
         
-        # Add available metric columns
+        # Additional metrics columns
         metric_cols = [
             'Performance Gls', 'Performance Ast', 'Standard Sh', 'Expected xG',
             'Touches Touches', 'Carries PrgC', 'Total Cmp%', 'PrgP', 'KP', 'Pass Types CK'
         ]
         
+        # Create player dataframe with available columns
         available_cols = player_cols + [col for col in metric_cols if col in df.columns]
         player_df = df[available_cols].copy() if available_cols else pd.DataFrame()
         
@@ -187,7 +178,7 @@ def load_fbref_data_from_github(github_url=None):
         if league_metrics:
             leagues_df = pd.DataFrame(league_metrics)
             
-            # Fill missing values with reasonable defaults
+            # Fill missing values with defaults
             default_values = {
                 'Shots Per 90': 12,
                 'Shot on Target %': 35,
@@ -208,12 +199,34 @@ def load_fbref_data_from_github(github_url=None):
                 if col not in leagues_df.columns:
                     leagues_df[col] = val
             
-            return leagues_df, player_df, f"Successfully loaded data for {len(leagues)} leagues from GitHub"
+            return leagues_df, player_df
         else:
-            return None, None, "Could not extract sufficient league-level metrics from the data"
+            st.warning("Could not extract league-level metrics from the data")
+            return None, None
     
     except Exception as e:
-        return None, None, f"Error processing data from GitHub: {str(e)}"
+        st.error(f"Error processing data: {str(e)}")
+        return None, None
+
+def load_and_process_data():
+    """
+    Load and process the football data
+    
+    Returns:
+        tuple: (league_level_df, player_level_df, using_sample_data)
+    """
+    # Load data from GitHub
+    df = load_data_from_github()
+    
+    if df is not None:
+        # Process the data
+        leagues_df, players_df = process_football_data(df)
+        
+        if leagues_df is not None:
+            return leagues_df, players_df, False
+    
+    # If we couldn't load or process the data, use sample data
+    return load_sample_data(), True
 
 def load_sample_data():
     """
@@ -222,58 +235,29 @@ def load_sample_data():
     Returns:
         tuple: (league_level_df, player_level_df)
     """
-    # Define leagues
-    leagues = ["Premier League", "La Liga", "Bundesliga", "Serie A", "Ligue 1", "Brazilian Serie A"]
+    # Define sample leagues
+    leagues = ["Premier League", "La Liga", "Bundesliga", "Serie A", "Ligue 1"]
     
-    # Create a synthetic dataframe with league-level metrics
+    # Create synthetic league data
     np.random.seed(42)  # For reproducibility
     
     data = []
     for league in leagues:
-        # Attack metrics
-        shots_per90 = np.random.normal(12.5, 1.5)
-        shot_on_target_pct = np.random.normal(35, 5)
-        xg_per_shot = np.random.normal(0.1, 0.02)
-        goals_per_shot = np.random.normal(0.11, 0.02)
-        
-        # Possession metrics
-        possession_pct = np.random.normal(50, 5)
-        touches_att_third = np.random.normal(160, 20)
-        progressive_carries = np.random.normal(75, 10)
-        
-        # Passing metrics
-        pass_completion = np.random.normal(82, 3)
-        progressive_passes = np.random.normal(70, 15)
-        key_passes = np.random.normal(10, 2)
-        
-        # Corner metrics
-        corners_per_match = np.random.normal(5.2, 0.5)
-        corner_success_rate = np.random.normal(3, 0.8)
-        short_corner_pct = np.random.normal(15, 5)
-        
         data.append({
             "League": league,
-            
-            # Attack metrics
-            "Shots Per 90": shots_per90,
-            "Shot on Target %": shot_on_target_pct,
-            "xG Per Shot": xg_per_shot,
-            "Goals Per Shot": goals_per_shot,
-            
-            # Possession metrics
-            "Possession %": possession_pct,
-            "Touches in Attacking Third": touches_att_third,
-            "Progressive Carries": progressive_carries,
-            
-            # Passing metrics
-            "Pass Completion %": pass_completion,
-            "Progressive Passes": progressive_passes,
-            "Key Passes": key_passes,
-            
-            # Corner metrics
-            "Corners Per Match": corners_per_match,
-            "Corner Success Rate (%)": corner_success_rate,
-            "Short Corner %": short_corner_pct,
+            "Shots Per 90": np.random.normal(12.5, 1.5),
+            "Shot on Target %": np.random.normal(35, 5),
+            "xG Per Shot": np.random.normal(0.1, 0.02),
+            "Goals Per Shot": np.random.normal(0.11, 0.02),
+            "Possession %": np.random.normal(50, 5),
+            "Touches in Attacking Third": np.random.normal(160, 20),
+            "Progressive Carries": np.random.normal(75, 10),
+            "Pass Completion %": np.random.normal(82, 3),
+            "Progressive Passes": np.random.normal(70, 15),
+            "Key Passes": np.random.normal(10, 2),
+            "Corners Per Match": np.random.normal(5.2, 0.5),
+            "Corner Success Rate (%)": np.random.normal(30, 5),
+            "Short Corner %": np.random.normal(15, 5),
         })
     
     leagues_df = pd.DataFrame(data)
@@ -283,11 +267,11 @@ def load_sample_data():
     player_data = []
     
     for league in leagues:
-        for team in range(5):  # 5 teams per league for the sample
+        for team in range(5):  # 5 teams per league
             team_name = f"Team {team+1} ({league})"
             
             for pos in positions:
-                for i in range(3 if pos in ['MF', 'DF'] else 2):  # More midfielders and defenders
+                for i in range(3 if pos in ['MF', 'DF'] else 2):
                     player_data.append({
                         'Player': f"Player {i+1} ({pos})",
                         'Squad': team_name,
@@ -303,71 +287,3 @@ def load_sample_data():
     players_df = pd.DataFrame(player_data)
     
     return leagues_df, players_df
-
-def data_loader_ui():
-    """
-    UI component for data loading in the Streamlit app with GitHub options
-    
-    Returns:
-        tuple: (league_level_df, player_level_df, using_sample_data)
-    """
-    st.sidebar.markdown("## Data Source")
-    
-    # Create a selection for data source
-    data_source = st.sidebar.radio(
-        "Select data source:",
-        ["Use GitHub Data", "Upload CSV File", "Use Sample Data"],
-        index=0  # Default to GitHub data
-    )
-    
-    if data_source == "Use GitHub Data":
-        # GitHub URL selection
-        st.sidebar.markdown("### GitHub Data URL")
-        
-        # Preset URLs option
-        preset_option = st.sidebar.selectbox(
-            "Select a preset dataset:",
-            ["Top 5 European Leagues 2022-23", "Premier League 2023-24", "Custom URL"]
-        )
-        
-        if preset_option == "Top 5 European Leagues 2022-23":
-            github_url = "https://raw.githubusercontent.com/your-username/football-data/main/top5_leagues_2022_23.csv"
-        elif preset_option == "Premier League 2023-24":
-            github_url = "https://raw.githubusercontent.com/your-username/football-data/main/premier_league_2023_24.csv"
-        else:
-            github_url = st.sidebar.text_input(
-                "Enter GitHub raw data URL:",
-                value="https://raw.githubusercontent.com/your-username/football-data/main/fbref_data.csv"
-            )
-        
-        # Use a standard spinner instead of the sidebar spinner
-        with st.spinner("Loading data from GitHub..."):
-            league_df, player_df, message = load_fbref_data_from_github(github_url)
-            
-            if league_df is not None:
-                st.sidebar.success(message)
-                return league_df, player_df, False
-            else:
-                st.sidebar.error(message)
-                st.sidebar.info("Using sample data instead")
-                return load_sample_data(), True
-    
-    elif data_source == "Upload CSV File":
-        uploaded_file = st.sidebar.file_uploader(
-            "Upload your FBref data (CSV format)",
-            type=['csv']
-        )
-        
-        if uploaded_file is not None:
-            # Process the uploaded file as before (using the original function from your code)
-            # This would need to call your original upload processing function
-            st.sidebar.error("File upload functionality is temporarily disabled. Please use GitHub data or sample data.")
-            st.sidebar.info("Using sample data instead")
-            return load_sample_data(), True
-        else:
-            st.sidebar.info("No file uploaded. Using sample data.")
-            return load_sample_data(), True
-    
-    else:  # Use Sample Data
-        st.sidebar.info("Using sample data for demonstration.")
-        return load_sample_data(), True
