@@ -42,7 +42,7 @@ def load_fbref_data_from_github(github_url=None):
     try:
         # Use default GitHub URL if none provided
         if github_url is None:
-            github_url = "https://raw.githubusercontent.com/your-username/your-repo/main/fbref_data.csv"
+            github_url = "https://github.com/ashmeetanand13/footy_world/blob/main/df_clean.csv"
         
         # Load the data
         df = load_data_from_github(github_url)
