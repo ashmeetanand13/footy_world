@@ -70,7 +70,46 @@ def process_football_data(df):
             league_data = {
                 'League': league
             }
+
+
+                        # Defense metrics
+            if 'Tackles Tkl' in df.columns:
+                # Tackles per 90
+                if 'Playing Time 90s' in df.columns:
+                    league_data['Tackles Per 90'] = league_df['Tackles Tkl'].sum() / max(1, league_df['Playing Time 90s'].sum())
+                
+                # Tackle success rate
+                if 'Tackles TklW' in df.columns:
+                    total_tackles = league_df['Tackles Tkl'].sum()
+                    if total_tackles > 0:
+                        league_data['Tackle Success %'] = 100 * league_df['Tackles TklW'].sum() / total_tackles
+                    else:
+                        league_data['Tackle Success %'] = 0
             
+            # Interceptions
+            if 'Int' in df.columns and 'Playing Time 90s' in df.columns:
+                league_data['Interceptions Per 90'] = league_df['Int'].sum() / max(1, league_df['Playing Time 90s'].sum())
+            
+            # Blocks
+            if 'Blocks Blocks' in df.columns and 'Playing Time 90s' in df.columns:
+                league_data['Blocks Per 90'] = league_df['Blocks Blocks'].sum() / max(1, league_df['Playing Time 90s'].sum())
+            
+            # Clearances
+            if 'Clr' in df.columns and 'Playing Time 90s' in df.columns:
+                league_data['Clearances Per 90'] = league_df['Clr'].sum() / max(1, league_df['Playing Time 90s'].sum())
+            
+            # Errors
+            if 'Err' in df.columns and 'Playing Time 90s' in df.columns:
+                league_data['Errors Per 90'] = league_df['Err'].sum() / max(1, league_df['Playing Time 90s'].sum())
+            
+            # Pressure metrics
+            if 'Pressure Succ%' in df.columns:
+                valid_pressure = league_df[league_df['Pressure Press'] > 0]
+                if not valid_pressure.empty:
+                    league_data['Pressure Success %'] = valid_pressure['Pressure Succ%'].mean()
+                else:
+                    league_data['Pressure Success %'] = 0
+        
             # Attack metrics
             if all(col in df.columns for col in ['Standard Sh', 'Playing Time 90s']):
                 # Shots per 90
