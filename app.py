@@ -253,7 +253,7 @@ fig.update_layout(height=500)
 st.plotly_chart(fig, use_container_width=True)
         
         # Radar chart for attacking metrics
-        attack_metrics = ["Shots Per 90", "Shot on Target %", "xG Per Shot", "Goals Per Shot"]
+    attack_metrics = ["Shots Per 90", "Shot on Target %", "xG Per Shot", "Goals Per Shot"]
         
         # Normalize data for radar chart
         radar_df = filtered_df.copy()
