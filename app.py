@@ -583,4 +583,4 @@ st.markdown("""
    - Passing: Passing style and creativity analysis  
    - Corners: Set piece strategies and effectiveness
 4. Enable the position-based analysis for more detailed insights by position
-
+""")
