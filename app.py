@@ -1166,9 +1166,7 @@ with main_tabs[1]:
             )
             fig.update_layout(height=500)
             st.plotly_chart(fig, use_container_width=True)
-
-st.plotly_chart(fig, use_container_width=True)
-
+            
 # Conditional tabs for advanced metrics
 if show_advanced and len(tabs) > 5:
     # 6. PLAYER IMPACT METRICS TAB
