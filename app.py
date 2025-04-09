@@ -584,8 +584,3 @@ st.markdown("""
    - Corners: Set piece strategies and effectiveness
 4. Enable the position-based analysis for more detailed insights by position
 
-**Data Source**: This application uses data from a GitHub repository at:
-https://github.com/ashmeetanand13/footy_world/blob/main/df_clean.csv
-
-**Note**: If the GitHub data cannot be loaded properly, the application will use sample data instead.
-""")
