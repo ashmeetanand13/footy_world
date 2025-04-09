@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from simplified_data_loader import load_and_process_data
+from data_loader import load_and_process_data
 
 # Set page config
 st.set_page_config(
