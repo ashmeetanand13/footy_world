@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.graph_objects as go
-from streamlit_github_data_loader import data_loader_ui, load_sample_data
+from simplified_data_loader import load_and_process_data
 
 # Set page config
 st.set_page_config(
@@ -55,17 +54,11 @@ This application analyzes and compares the playing styles of different football 
 four key dimensions: **Attack**, **Possession**, **Passing**, and **Corner Kick Strategies**.
 """)
 
-# Add information about the GitHub data source
-st.info("""
-This app now loads data directly from GitHub repositories. You can select from preset datasets or provide your own GitHub raw data URL.
-Check the sidebar to select your data source.
-""")
-
-# Load data using our new GitHub data loader
-leagues_df, players_df, using_sample_data = data_loader_ui()
+# Load data
+leagues_df, players_df, using_sample_data = load_and_process_data()
 
 if using_sample_data:
-    st.warning("Currently using sample data. You can load real data from GitHub by selecting the appropriate option in the sidebar.")
+    st.warning("Using sample data because the GitHub data could not be loaded or processed.")
 
 # Sidebar for filtering
 st.sidebar.markdown("## Filters")
@@ -104,6 +97,160 @@ with tab1:
         )
         fig.update_layout(height=500)
         st.plotly_chart(fig, use_container_width=True)
+
+# Position-based analysis section
+if position_analysis and players_df is not None and not players_df.empty:
+    st.markdown('<p class="sub-header">Position-Based Analysis</p>', unsafe_allow_html=True)
+    
+    # Filter to selected leagues
+    filtered_players = players_df[players_df["Competition"].isin(selected_leagues)]
+    
+    if not filtered_players.empty and "Pos" in filtered_players.columns:
+        # Position distribution by league
+        st.markdown("### Position Distribution by League")
+        
+        # Make sure position is standardized
+        if "Pos" in filtered_players.columns:
+            # Extract the first position for players with multiple positions (e.g., "FW,MF" becomes "FW")
+            filtered_players["Primary Position"] = filtered_players["Pos"].apply(lambda x: x.split(',')[0] if isinstance(x, str) and ',' in x else x)
+            
+            # Count players by position and league
+            position_counts = filtered_players.groupby(["Competition", "Primary Position"]).size().reset_index(name="Count")
+            
+            # Plot position distribution
+            fig = px.bar(
+                position_counts,
+                x="Primary Position",
+                y="Count",
+                color="Competition",
+                barmode="group",
+                title="Player Position Distribution by League",
+                labels={"Primary Position": "Position", "Count": "Number of Players"},
+                color_discrete_sequence=px.colors.qualitative.Bold
+            )
+            fig.update_layout(height=500)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Position performance metrics by league
+            st.markdown("### Position Performance by League")
+            
+            # Select metric for comparison
+            available_metrics = [col for col in ["Performance Gls", "Performance Ast", "Total Cmp%", "PrgP", "Carries PrgC"] 
+                              if col in filtered_players.columns]
+            
+            if available_metrics:
+                performance_metric = st.selectbox(
+                    "Select Performance Metric",
+                    options=available_metrics,
+                    index=0
+                )
+                
+                # Calculate average metric by position and league
+                perf_by_pos = filtered_players.groupby(["Competition", "Primary Position"])[performance_metric].mean().reset_index()
+                
+                # Plot performance by position
+                fig = px.bar(
+                    perf_by_pos,
+                    x="Primary Position",
+                    y=performance_metric,
+                    color="Competition",
+                    barmode="group",
+                    title=f"Average {performance_metric} by Position and League",
+                    labels={"Primary Position": "Position"},
+                    color_discrete_sequence=px.colors.qualitative.Bold
+                )
+                fig.update_layout(height=500)
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("No performance metrics available in the data.")
+    else:
+        st.warning("No position data available for the selected leagues.")
+
+# Footer with instructions
+st.markdown("""
+---
+### How to use this analyzer:
+
+1. The app automatically loads football data from GitHub
+2. Select specific leagues to compare using the dropdown menu in the sidebar
+3. Navigate through the tabs to explore different aspects of playing styles:
+   - Attack: Shot volume, efficiency, and expected goals analysis
+   - Possession: Ball retention and progression metrics
+   - Passing: Passing style and creativity analysis  
+   - Corners: Set piece strategies and effectiveness
+4. Enable the position-based analysis for more detailed insights by position
+
+**Data Source**: This application uses data from a GitHub repository at:
+https://github.com/ashmeetanand13/footy_world/blob/main/df_clean.csv
+
+**Note**: If the GitHub data cannot be loaded properly, the application will use sample data instead.
+""")
+
+# Summary section
+st.markdown('<p class="sub-header">League Style Summary</p>', unsafe_allow_html=True)
+
+# Create a summary dataframe with league archetypes
+summary_df = filtered_df.copy()
+
+# Determine archetypal characteristics
+summary_df["Attack Style"] = np.where(
+    summary_df["xG Per Shot"] > summary_df["xG Per Shot"].mean(),
+    "Quality Chances",
+    "High Volume"
+)
+
+summary_df["Possession Approach"] = np.where(
+    summary_df["Progressive Carries"] > summary_df["Progressive Carries"].mean(),
+    "Progressive",
+    "Conservative"
+)
+
+summary_df["Passing Identity"] = np.where(
+    summary_df["Key Passes"] > summary_df["Key Passes"].mean(),
+    "Creative",
+    "Safe"
+)
+
+summary_df["Set Piece Emphasis"] = np.where(
+    summary_df["Corner Success Rate (%)"] > summary_df["Corner Success Rate (%)"].mean(),
+    "Set Piece Focused",
+    "Open Play Focused"
+)
+
+# Display style summary
+style_summary = summary_df[["League", "Attack Style", "Possession Approach", "Passing Identity", "Set Piece Emphasis"]]
+st.dataframe(style_summary, use_container_width=True)
+
+# League comparison chart (overall style visualization)
+st.markdown("### Overall League Style Comparison")
+
+# Create a normalized dataframe for overall comparison
+comparison_metrics = [
+    "Shots Per 90", "xG Per Shot", "Possession %", 
+    "Progressive Carries", "Pass Completion %", "Key Passes",
+    "Corners Per Match", "Corner Success Rate (%)"
+]
+
+compare_df = filtered_df.copy()
+for metric in comparison_metrics:
+    min_val = compare_df[metric].min()
+    max_val = compare_df[metric].max()
+    if max_val > min_val:
+        compare_df[metric] = (compare_df[metric] - min_val) / (max_val - min_val)
+    else:
+        compare_df[metric] = 0.5  # Default value if no variation
+
+# Heatmap of normalized values
+fig = px.imshow(
+    compare_df.set_index('League')[comparison_metrics],
+    labels=dict(x="Metric", y="League", color="Normalized Value"),
+    x=comparison_metrics,
+    y=compare_df["League"],
+    color_continuous_scale="Blues",
+    title="League Style Heatmap (Normalized Values)"
+)
+fig.update_layout(height=500)
+st.plotly_chart(fig, use_container_width=True)
         
         # Radar chart for attacking metrics
         attack_metrics = ["Shots Per 90", "Shot on Target %", "xG Per Shot", "Goals Per Shot"]
@@ -175,8 +322,6 @@ with tab1:
         
         st.dataframe(efficiency_table, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
-
-# Note: Full implementation continues below for all tabs
 
 with tab2:
     st.markdown('<p class="sub-header">Possession Analysis</p>', unsafe_allow_html=True)
@@ -444,164 +589,3 @@ with tab4:
             height=500
         )
         st.plotly_chart(fig, use_container_width=True)
-
-# Summary section
-st.markdown('<p class="sub-header">League Style Summary</p>', unsafe_allow_html=True)
-
-# Create a summary dataframe with league archetypes
-summary_df = filtered_df.copy()
-
-# Determine archetypal characteristics
-summary_df["Attack Style"] = np.where(
-    summary_df["xG Per Shot"] > summary_df["xG Per Shot"].mean(),
-    "Quality Chances",
-    "High Volume"
-)
-
-summary_df["Possession Approach"] = np.where(
-    summary_df["Progressive Carries"] > summary_df["Progressive Carries"].mean(),
-    "Progressive",
-    "Conservative"
-)
-
-summary_df["Passing Identity"] = np.where(
-    summary_df["Key Passes"] > summary_df["Key Passes"].mean(),
-    "Creative",
-    "Safe"
-)
-
-summary_df["Set Piece Emphasis"] = np.where(
-    summary_df["Corner Success Rate (%)"] > summary_df["Corner Success Rate (%)"].mean(),
-    "Set Piece Focused",
-    "Open Play Focused"
-)
-
-# Display style summary
-style_summary = summary_df[["League", "Attack Style", "Possession Approach", "Passing Identity", "Set Piece Emphasis"]]
-st.dataframe(style_summary, use_container_width=True)
-
-# League comparison chart (overall style visualization)
-st.markdown("### Overall League Style Comparison")
-
-# Create a normalized dataframe for overall comparison
-comparison_metrics = [
-    "Shots Per 90", "xG Per Shot", "Possession %", 
-    "Progressive Carries", "Pass Completion %", "Key Passes",
-    "Corners Per Match", "Corner Success Rate (%)"
-]
-
-compare_df = filtered_df.copy()
-for metric in comparison_metrics:
-    min_val = compare_df[metric].min()
-    max_val = compare_df[metric].max()
-    if max_val > min_val:
-        compare_df[metric] = (compare_df[metric] - min_val) / (max_val - min_val)
-    else:
-        compare_df[metric] = 0.5  # Default value if no variation
-
-# Heatmap of normalized values
-fig = px.imshow(
-    compare_df.set_index('League')[comparison_metrics],
-    labels=dict(x="Metric", y="League", color="Normalized Value"),
-    x=comparison_metrics,
-    y=compare_df["League"],
-    color_continuous_scale="Blues",
-    title="League Style Heatmap (Normalized Values)"
-)
-fig.update_layout(height=500)
-st.plotly_chart(fig, use_container_width=True)
-
-# Position-based analysis section
-if position_analysis and players_df is not None and not players_df.empty:
-    st.markdown('<p class="sub-header">Position-Based Analysis</p>', unsafe_allow_html=True)
-    
-    # Filter to selected leagues
-    filtered_players = players_df[players_df["Competition"].isin(selected_leagues)]
-    
-    if not filtered_players.empty and "Pos" in filtered_players.columns:
-        # Position distribution by league
-        st.markdown("### Position Distribution by League")
-        
-        # Make sure position is standardized
-        if "Pos" in filtered_players.columns:
-            # Extract the first position for players with multiple positions (e.g., "FW,MF" becomes "FW")
-            filtered_players["Primary Position"] = filtered_players["Pos"].apply(lambda x: x.split(',')[0] if isinstance(x, str) and ',' in x else x)
-            
-            # Count players by position and league
-            position_counts = filtered_players.groupby(["Competition", "Primary Position"]).size().reset_index(name="Count")
-            
-            # Plot position distribution
-            fig = px.bar(
-                position_counts,
-                x="Primary Position",
-                y="Count",
-                color="Competition",
-                barmode="group",
-                title="Player Position Distribution by League",
-                labels={"Primary Position": "Position", "Count": "Number of Players"},
-                color_discrete_sequence=px.colors.qualitative.Bold
-            )
-            fig.update_layout(height=500)
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Position performance metrics by league
-            st.markdown("### Position Performance by League")
-            
-            # Select metric for comparison
-            available_metrics = [col for col in ["Performance Gls", "Performance Ast", "Total Cmp%", "PrgP", "Carries PrgC"] 
-                              if col in filtered_players.columns]
-            
-            if available_metrics:
-                performance_metric = st.selectbox(
-                    "Select Performance Metric",
-                    options=available_metrics,
-                    index=0
-                )
-                
-                # Calculate average metric by position and league
-                perf_by_pos = filtered_players.groupby(["Competition", "Primary Position"])[performance_metric].mean().reset_index()
-                
-                # Plot performance by position
-                fig = px.bar(
-                    perf_by_pos,
-                    x="Primary Position",
-                    y=performance_metric,
-                    color="Competition",
-                    barmode="group",
-                    title=f"Average {performance_metric} by Position and League",
-                    labels={"Primary Position": "Position"},
-                    color_discrete_sequence=px.colors.qualitative.Bold
-                )
-                fig.update_layout(height=500)
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.warning("No performance metrics available in the data.")
-    else:
-        st.warning("No position data available for the selected leagues.")
-
-# Footer with instructions
-st.markdown("""
----
-### How to use this analyzer:
-
-1. Select a data source from the sidebar:
-   - Use GitHub data (recommended): Pre-configured datasets or custom URL
-   - Upload your own FBref CSV file
-   - Use sample data for demonstration
-
-2. Select specific leagues to compare using the dropdown menu in the sidebar
-
-3. Navigate through the tabs to explore different aspects of playing styles:
-   - Attack: Shot volume, efficiency, and expected goals analysis
-   - Possession: Ball retention and progression metrics
-   - Passing: Passing style and creativity analysis  
-   - Corners: Set piece strategies and effectiveness
-
-4. Enable the position-based analysis for more detailed insights by position
-
-**Data Sources**: The application can load data directly from GitHub repositories containing
-FBref CSV exports. If you have your own dataset, you can upload it using the file uploader.
-
-**Note**: For the best experience, ensure your data includes columns for player statistics
-including shots, goals, expected goals, passing metrics, and possession data.
-""")
