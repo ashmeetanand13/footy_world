@@ -78,7 +78,7 @@ if position_analysis and players_df is not None and not players_df.empty:
     st.write("Position analysis will be shown after the main analysis tabs.")
 
 # Main analysis tabs
-tab1, tab2, tab3, tab4 = st.tabs(["Attack", "Possession", "Passing", "Corners"])
+tab1, tab_defense, tab2, tab3, tab4 = st.tabs(["Attack", "Defense", "Possession", "Passing", "Corners"])
 
 with tab1:
     st.markdown('<p class="sub-header">Attack Analysis</p>', unsafe_allow_html=True)
@@ -345,6 +345,98 @@ with tab3:
         )
         st.plotly_chart(fig, use_container_width=True)
 
+with tab_defense:
+    st.markdown('<p class="sub-header">Defense Analysis</p>', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Tackles per 90
+        fig = px.bar(
+            filtered_df, 
+            x="League", 
+            y="Tackles Per 90",
+            color="League",
+            title="Tackles Per 90 Minutes by League",
+            color_discrete_sequence=px.colors.qualitative.Bold
+        )
+        fig.update_layout(height=500)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Defense metrics table
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown("### Defense Style Indicators")
+        
+        defense_df = filtered_df.copy()
+        defense_df["Tackle to Interception Ratio"] = defense_df["Tackles Per 90"] / defense_df["Interceptions Per 90"]
+        defense_df["Defensive Efficiency"] = defense_df["Tackle Success %"] / 100 * defense_df["Pressure Success %"] / 100 * 100
+        
+        defense_df = defense_df.sort_values("Tackles Per 90", ascending=False)
+        defense_table = defense_df[["League", "Tackles Per 90", "Tackle Success %", "Interceptions Per 90", "Defensive Efficiency"]]
+        
+        defense_table["Tackles Per 90"] = defense_table["Tackles Per 90"].map(lambda x: f"{x:.1f}")
+        defense_table["Tackle Success %"] = defense_table["Tackle Success %"].map(lambda x: f"{x:.1f}%")
+        defense_table["Interceptions Per 90"] = defense_table["Interceptions Per 90"].map(lambda x: f"{x:.1f}")
+        defense_table["Defensive Efficiency"] = defense_table["Defensive Efficiency"].map(lambda x: f"{x:.1f}%")
+        
+        st.dataframe(defense_table, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col2:
+        # Defensive actions scatter plot
+        fig = px.scatter(
+            filtered_df,
+            x="Tackles Per 90",
+            y="Interceptions Per 90",
+            size="Blocks Per 90",
+            color="League",
+            hover_name="League",
+            title="Defensive Style: Tackles vs Interceptions",
+            labels={
+                "Tackles Per 90": "Tackles Per 90 Minutes", 
+                "Interceptions Per 90": "Interceptions Per 90 Minutes",
+                "Blocks Per 90": "Blocks Per 90 Minutes"
+            },
+            color_discrete_sequence=px.colors.qualitative.Bold
+        )
+        fig.update_layout(height=500)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Defense metrics - Radar chart
+        defense_metrics = ["Tackles Per 90", "Tackle Success %", "Interceptions Per 90", "Blocks Per 90", "Pressure Success %"]
+        
+        # Normalize data for radar chart
+        radar_df = filtered_df.copy()
+        for metric in defense_metrics:
+            min_val = radar_df[metric].min()
+            max_val = radar_df[metric].max()
+            if max_val > min_val:
+                radar_df[metric] = (radar_df[metric] - min_val) / (max_val - min_val)
+            else:
+                radar_df[metric] = 0.5  # Default value if no variation
+        
+        fig = go.Figure()
+        for i, league in enumerate(radar_df["League"]):
+            fig.add_trace(go.Scatterpolar(
+                r=radar_df.loc[radar_df["League"] == league, defense_metrics].values[0],
+                theta=defense_metrics,
+                fill='toself',
+                name=league
+            ))
+        
+        fig.update_layout(
+            polar=dict(
+                radialaxis=dict(
+                    visible=True,
+                    range=[0, 1]
+                )),
+            showlegend=True,
+            title="Defense Metrics Comparison",
+            height=500
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+
 with tab4:
     st.markdown('<p class="sub-header">Corner Kick Analysis</p>', unsafe_allow_html=True)
     
@@ -435,6 +527,10 @@ with tab4:
             height=500
         )
         st.plotly_chart(fig, use_container_width=True)
+        
+
+
+
 
 # Summary section
 st.markdown('<p class="sub-header">League Style Summary</p>', unsafe_allow_html=True)
