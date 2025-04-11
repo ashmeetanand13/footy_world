@@ -180,8 +180,14 @@ def compute_team_metrics(df):
             
             teams_data.append(team_data)
         
+        # Clear progress indicators
+        progress_placeholder.empty()
+        status_text.text("Creating team metrics dataframe...")
+        
         # Create DataFrame from the team metrics
         teams_df = pd.DataFrame(teams_data)
+        
+        status_text.text("Team metrics processing complete!")
         
         return teams_df
     
@@ -203,6 +209,8 @@ def normalize_metrics(teams_df):
     if teams_df is None or teams_df.empty:
         return None
     
+    status_text.text("Normalizing metrics within each competition...")
+    
     # Create a copy of the DataFrame
     normalized_df = teams_df.copy()
     
@@ -216,8 +224,17 @@ def normalize_metrics(teams_df):
     numeric_cols = normalized_df.select_dtypes(include=['number']).columns
     metrics_to_normalize = [col for col in numeric_cols if col not in exclude_cols]
     
+    # Show progress
+    total_competitions = len(normalized_df['Competition'].unique())
+    progress_bar = progress_placeholder.progress(0)
+    
     # Normalize metrics within each competition
-    for competition in normalized_df['Competition'].unique():
+    for i, competition in enumerate(normalized_df['Competition'].unique()):
+        # Update progress
+        progress_percent = min(100, int((i / total_competitions) * 100))
+        progress_bar.progress(progress_percent / 100)
+        status_text.text(f"Normalizing metrics for competition {i+1}/{total_competitions}: {competition}")
+        
         comp_mask = normalized_df['Competition'] == competition
         
         for col in metrics_to_normalize:
@@ -240,6 +257,10 @@ def normalize_metrics(teams_df):
     for col in ['Shot on Target %', 'Attacking Third Touches %', 'Box Touches %', 'Pass Completion %']:
         if col in normalized_df.columns:
             normalized_df[f'Normalized {col}'] = normalized_df[col] / 100
+    
+    # Clear progress indicators
+    progress_placeholder.empty()
+    status_text.text("Normalization complete!")
     
     return normalized_df
 
@@ -543,6 +564,11 @@ def main():
     # Title and introduction
     st.markdown('<p class="main-header">⚽ Football Team Playing Style Analyzer</p>', unsafe_allow_html=True)
     
+    # Initialization of progress placeholders (used in other functions)
+    global progress_placeholder, status_text
+    progress_placeholder = st.empty()
+    status_text = st.empty()
+    
     # Load and process data
     df = load_data()
     
@@ -556,6 +582,14 @@ def main():
             normalized_teams_df = normalize_metrics(teams_df)
         
         if normalized_teams_df is not None:
+            # Optional data caching info
+            if "normalized_teams_df" in st.session_state:
+                st.success("Using cached data from previous run for faster performance")
+            else:
+                st.session_state["normalized_teams_df"] = normalized_teams_df
+                
+            # Clear any lingering status messages
+            status_text.empty()
             # Sidebar for filtering and navigation
             st.sidebar.markdown("## Navigation")
             app_mode = st.sidebar.radio("Select Mode", ["Single Team Analysis", "Team Comparison"])
