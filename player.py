@@ -423,16 +423,37 @@ def find_similar_players(player_data, all_players_df, position, top_n=10):
     if not numeric_cols:
         return pd.DataFrame()
     
-    # Standardize the features
-    scaler = StandardScaler()
-    
-    # Prepare data for comparison
-    player_values = player_data[numeric_cols].values.reshape(1, -1)
+    # Prepare data for comparison - handle NaN values
+    player_values = player_data[numeric_cols].fillna(0).values.reshape(1, -1)
     position_values = position_df[numeric_cols].fillna(0).values
     
-    # Fit scaler and transform
+    # Check for any remaining NaN or inf values
+    player_values = np.nan_to_num(player_values, nan=0.0, posinf=0.0, neginf=0.0)
+    position_values = np.nan_to_num(position_values, nan=0.0, posinf=0.0, neginf=0.0)
+    
+    # Combine for scaling
     all_values = np.vstack([player_values, position_values])
-    all_values_scaled = scaler.fit_transform(all_values)
+    
+    # Check for columns with zero variance (all same values)
+    variances = np.var(all_values, axis=0)
+    valid_cols = variances > 1e-10  # Keep columns with non-zero variance
+    
+    if not valid_cols.any():
+        # If no valid columns, return empty
+        return pd.DataFrame()
+    
+    # Filter to valid columns only
+    all_values_valid = all_values[:, valid_cols]
+    
+    # Standardize the features (only for columns with variance)
+    scaler = StandardScaler()
+    try:
+        all_values_scaled = scaler.fit_transform(all_values_valid)
+    except:
+        # If scaling fails, use raw values normalized by max
+        max_vals = np.max(np.abs(all_values_valid), axis=0)
+        max_vals[max_vals == 0] = 1  # Avoid division by zero
+        all_values_scaled = all_values_valid / max_vals
     
     player_scaled = all_values_scaled[0]
     position_scaled = all_values_scaled[1:]
@@ -440,7 +461,16 @@ def find_similar_players(player_data, all_players_df, position, top_n=10):
     # Calculate distances
     distances = []
     for i, row in enumerate(position_scaled):
-        dist = euclidean(player_scaled, row)
+        try:
+            # Additional check for NaN/inf before distance calculation
+            if np.any(np.isnan(player_scaled)) or np.any(np.isnan(row)):
+                dist = 999999  # Large distance for problematic data
+            elif np.any(np.isinf(player_scaled)) or np.any(np.isinf(row)):
+                dist = 999999
+            else:
+                dist = euclidean(player_scaled, row)
+        except:
+            dist = 999999  # Large distance if calculation fails
         distances.append(dist)
     
     position_df['Similarity_Distance'] = distances
