@@ -412,77 +412,94 @@ def find_similar_players(player_data, all_players_df, position, top_n=10):
         return pd.DataFrame()
     
     # Get numeric columns that are in both datasets
+    # Prioritize Per 90 metrics, but exclude the Total_Minutes column we created
     numeric_cols = [col for col in position_df.select_dtypes(include=['number']).columns
-                   if col in player_data.index and 'Per 90' in col]
+                   if col in player_data.index and col != 'Total_Minutes']
     
-    if not numeric_cols:
-        # Fallback to any numeric columns
-        numeric_cols = [col for col in position_df.select_dtypes(include=['number']).columns
-                       if col in player_data.index][:20]
+    # Filter to get meaningful metrics (prefer Per 90 or percentage metrics)
+    per_90_cols = [col for col in numeric_cols if 'Per 90' in col or 'per 90' in col]
+    pct_cols = [col for col in numeric_cols if '%' in col or 'pct' in col.lower()]
+    other_cols = [col for col in numeric_cols if col not in per_90_cols and col not in pct_cols]
     
-    if not numeric_cols:
+    # Combine, prioritizing Per 90 and percentage metrics
+    selected_cols = per_90_cols + pct_cols + other_cols[:max(0, 20 - len(per_90_cols) - len(pct_cols))]
+    
+    if not selected_cols:
+        # If no good columns found, use any numeric columns
+        selected_cols = numeric_cols[:20]
+    
+    if not selected_cols:
         return pd.DataFrame()
     
-    # Prepare data for comparison - handle NaN values
-    player_values = player_data[numeric_cols].fillna(0).values.reshape(1, -1)
-    position_values = position_df[numeric_cols].fillna(0).values
+    # Prepare data for comparison
+    player_values = []
+    position_values = []
     
-    # Check for any remaining NaN or inf values
-    player_values = np.nan_to_num(player_values, nan=0.0, posinf=0.0, neginf=0.0)
-    position_values = np.nan_to_num(position_values, nan=0.0, posinf=0.0, neginf=0.0)
+    # Build arrays, skipping columns where player has NaN
+    valid_cols = []
+    for col in selected_cols:
+        if pd.notna(player_data[col]):
+            player_values.append(player_data[col])
+            position_values.append(position_df[col].fillna(0).values)
+            valid_cols.append(col)
     
-    # Combine for scaling
-    all_values = np.vstack([player_values, position_values])
-    
-    # Check for columns with zero variance (all same values)
-    variances = np.var(all_values, axis=0)
-    valid_cols = variances > 1e-10  # Keep columns with non-zero variance
-    
-    if not valid_cols.any():
-        # If no valid columns, return empty
+    if not valid_cols:
         return pd.DataFrame()
     
-    # Filter to valid columns only
-    all_values_valid = all_values[:, valid_cols]
+    # Convert to numpy arrays
+    player_array = np.array(player_values)
+    position_array = np.array(position_values).T  # Transpose to get players x features
     
-    # Standardize the features (only for columns with variance)
-    scaler = StandardScaler()
-    try:
-        all_values_scaled = scaler.fit_transform(all_values_valid)
-    except:
-        # If scaling fails, use raw values normalized by max
-        max_vals = np.max(np.abs(all_values_valid), axis=0)
-        max_vals[max_vals == 0] = 1  # Avoid division by zero
-        all_values_scaled = all_values_valid / max_vals
+    # Handle NaN and inf values
+    player_array = np.nan_to_num(player_array, nan=0.0, posinf=0.0, neginf=0.0)
+    position_array = np.nan_to_num(position_array, nan=0.0, posinf=0.0, neginf=0.0)
     
-    player_scaled = all_values_scaled[0]
-    position_scaled = all_values_scaled[1:]
+    # Normalize by column (feature-wise) to put all metrics on same scale
+    # This is crucial for meaningful distance calculations
+    all_data = np.vstack([player_array.reshape(1, -1), position_array])
     
-    # Calculate distances
+    # Calculate min and max for each feature
+    feature_min = np.min(all_data, axis=0)
+    feature_max = np.max(all_data, axis=0)
+    feature_range = feature_max - feature_min
+    
+    # Avoid division by zero
+    feature_range[feature_range == 0] = 1
+    
+    # Normalize to 0-1 scale
+    player_normalized = (player_array - feature_min) / feature_range
+    position_normalized = (position_array - feature_min) / feature_range
+    
+    # Calculate Euclidean distances
     distances = []
-    for i, row in enumerate(position_scaled):
+    for i in range(len(position_normalized)):
         try:
-            # Additional check for NaN/inf before distance calculation
-            if np.any(np.isnan(player_scaled)) or np.any(np.isnan(row)):
-                dist = 999999  # Large distance for problematic data
-            elif np.any(np.isinf(player_scaled)) or np.any(np.isinf(row)):
-                dist = 999999
-            else:
-                dist = euclidean(player_scaled, row)
-        except:
-            dist = 999999  # Large distance if calculation fails
-        distances.append(dist)
+            # Calculate Euclidean distance
+            diff = player_normalized - position_normalized[i]
+            dist = np.sqrt(np.sum(diff ** 2))
+            distances.append(dist)
+        except Exception as e:
+            # If any error, use maximum distance
+            distances.append(np.sqrt(len(valid_cols)))  # Max possible normalized distance
     
+    # Add distances to dataframe
     position_df['Similarity_Distance'] = distances
-    position_df['Similarity_Score'] = 1 / (1 + position_df['Similarity_Distance'])
+    
+    # Calculate similarity score (0-100%)
+    # Normalize distances to 0-1 range first
+    max_dist = np.sqrt(len(valid_cols))  # Maximum possible distance in normalized space
+    position_df['Similarity_Score'] = 100 * (1 - position_df['Similarity_Distance'] / max_dist)
+    
+    # Ensure scores are in valid range
+    position_df['Similarity_Score'] = position_df['Similarity_Score'].clip(0, 100)
     
     # Sort by similarity and get top N
     similar_players = position_df.nsmallest(top_n, 'Similarity_Distance')[
         ['Player', 'Squad', 'Competition', 'Season', 'Similarity_Score']
     ].copy()
     
-    # Convert similarity score to percentage
-    similar_players['Similarity %'] = (similar_players['Similarity_Score'] * 100).round(1)
+    # Round similarity percentage
+    similar_players['Similarity %'] = similar_players['Similarity_Score'].round(1)
     similar_players = similar_players.drop('Similarity_Score', axis=1)
     
     return similar_players
