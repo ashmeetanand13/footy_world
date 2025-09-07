@@ -517,45 +517,72 @@ def main():
     # Add minimum minutes filter
     st.sidebar.markdown("### Playing Time Filter")
     
-    # Find the minutes column
-    minutes_cols = [col for col in players_df.columns if any(keyword in col.lower() for keyword in ['90s', '90', 'minutes', 'min', 'mp'])]
+    # Find the minutes column - look for various possible column names
+    possible_minutes_cols = [col for col in players_df.columns if 
+                            any(keyword in col.lower() for keyword in ['90s', 'minutes', 'min', 'mp'])
+                            and not any(exclude in col.lower() for exclude in ['per', 'avg', '%'])]
     
-    if minutes_cols:
-        minutes_col = minutes_cols[0]
+    if possible_minutes_cols:
+        # Use the first matching column
+        minutes_col = possible_minutes_cols[0]
         
-        # Calculate actual minutes (if column is in 90s, multiply by 90)
-        if '90s' in minutes_col.lower():
+        # Debug info
+        st.sidebar.caption(f"Using column: {minutes_col}")
+        
+        # Calculate actual minutes
+        if '90s' in minutes_col.lower() or '90' in minutes_col:
+            # Column is in 90s, multiply by 90 to get actual minutes
             players_df['Total_Minutes'] = players_df[minutes_col] * 90
         else:
+            # Column is already in minutes
             players_df['Total_Minutes'] = players_df[minutes_col]
         
+        # Clean the data - remove NaN and ensure positive values
+        players_df['Total_Minutes'] = players_df['Total_Minutes'].fillna(0)
+        players_df['Total_Minutes'] = players_df['Total_Minutes'].clip(lower=0)
+        
         # Get min and max for the slider
-        min_minutes = int(players_df['Total_Minutes'].min())
-        max_minutes = int(players_df['Total_Minutes'].max())
+        min_val = 0  # Always start from 0
+        max_val = players_df['Total_Minutes'].max()
         
-        # Default to 450 minutes (5 full matches) as minimum
-        default_min = min(450, max_minutes // 2)
-        
-        min_minutes_filter = st.sidebar.slider(
-            "Minimum Minutes Played",
-            min_value=min_minutes,
-            max_value=max_minutes,
-            value=default_min,
-            step=90,
-            help="Filter out players with less than this many minutes played. 90 minutes = 1 full match"
-        )
-        
-        # Show equivalent matches
-        st.sidebar.caption(f"≈ {min_minutes_filter / 90:.1f} full matches")
-        
-        # Apply the filter
-        players_df = players_df[players_df['Total_Minutes'] >= min_minutes_filter]
-        
-        # Show how many players remain after filtering
-        st.sidebar.info(f"Players shown: {len(players_df):,}")
+        # Only create slider if we have valid range
+        if max_val > 0:
+            # Set reasonable defaults
+            default_min = min(450, max_val * 0.1)  # Default to 450 minutes or 10% of max
+            
+            min_minutes_filter = st.sidebar.slider(
+                "Minimum Minutes Played",
+                min_value=min_val,
+                max_value=int(max_val),
+                value=int(default_min),
+                step=90,
+                help="Filter out players with less than this many minutes played. 90 minutes = 1 full match"
+            )
+            
+            # Show equivalent matches
+            st.sidebar.caption(f"≈ {min_minutes_filter / 90:.1f} full matches")
+            
+            # Apply the filter
+            players_df_filtered = players_df[players_df['Total_Minutes'] >= min_minutes_filter].copy()
+            
+            # Show how many players remain after filtering
+            total_players = len(players_df)
+            filtered_players = len(players_df_filtered)
+            st.sidebar.info(f"Showing {filtered_players:,} of {total_players:,} players")
+            
+            # Use the filtered dataframe
+            players_df = players_df_filtered
+        else:
+            st.sidebar.warning("Could not calculate valid minutes range")
+            min_minutes_filter = 0
     else:
-        st.sidebar.warning("Minutes data not found - showing all players")
+        st.sidebar.warning("Minutes/90s column not found - showing all players")
         min_minutes_filter = 0
+        # List available columns for debugging
+        st.sidebar.caption("Available columns:")
+        numeric_cols = [col for col in players_df.select_dtypes(include=['number']).columns][:5]
+        for col in numeric_cols:
+            st.sidebar.caption(f"- {col}")
     
     st.sidebar.markdown("---")
     
