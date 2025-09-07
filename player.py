@@ -404,7 +404,7 @@ def find_similar_players(player_data, all_players_df, position, top_n=10):
     # Filter to same position
     position_df = all_players_df[all_players_df['Primary_Position'] == position].copy()
     
-    # Remove the current player
+    # Remove the current player (all instances)
     if 'Player' in player_data.index:
         position_df = position_df[position_df['Player'] != player_data['Player']]
     
@@ -493,14 +493,33 @@ def find_similar_players(player_data, all_players_df, position, top_n=10):
     # Ensure scores are in valid range
     position_df['Similarity_Score'] = position_df['Similarity_Score'].clip(0, 100)
     
-    # Sort by similarity and get top N
-    similar_players = position_df.nsmallest(top_n, 'Similarity_Distance')[
-        ['Player', 'Squad', 'Competition', 'Season', 'Similarity_Score']
-    ].copy()
+    # Sort by similarity
+    position_df = position_df.sort_values('Similarity_Distance')
     
-    # Round similarity percentage
-    similar_players['Similarity %'] = similar_players['Similarity_Score'].round(1)
-    similar_players = similar_players.drop('Similarity_Score', axis=1)
+    # DEDUPLICATION: Keep only the best entry for each player
+    # Group by player name and keep the one with highest similarity (lowest distance)
+    seen_players = set()
+    deduplicated_rows = []
+    
+    for idx, row in position_df.iterrows():
+        player_name = row['Player']
+        if player_name not in seen_players:
+            seen_players.add(player_name)
+            deduplicated_rows.append(row)
+            if len(deduplicated_rows) >= top_n:
+                break
+    
+    # Create final dataframe from deduplicated rows
+    if deduplicated_rows:
+        similar_players = pd.DataFrame(deduplicated_rows)[
+            ['Player', 'Squad', 'Competition', 'Season', 'Similarity_Score']
+        ].copy()
+        
+        # Round similarity percentage
+        similar_players['Similarity %'] = similar_players['Similarity_Score'].round(1)
+        similar_players = similar_players.drop('Similarity_Score', axis=1)
+    else:
+        similar_players = pd.DataFrame()
     
     return similar_players
 
