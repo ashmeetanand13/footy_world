@@ -202,34 +202,88 @@ def process_player_data(df):
         return None
 
 def get_position_metrics(position, available_columns):
-    """Define relevant metrics for each position based on available columns"""
-    # Define position-specific metric priorities
+    """Define relevant metrics for each specific position based on available columns"""
+    # Define position-specific metric priorities for detailed positions
     position_metrics = {
-        'FW': {
-            'primary': ['gls', 'xg', 'shot', 'sot', 'g/sh', 'g/sot', 'npxg'],
-            'secondary': ['ast', 'xa', 'sca', 'gca', 'key', 'touches', 'carries'],
+        'GK': {
+            'primary': ['save', 'saves%', 'clean', 'psxg', 'sota', 'ga', 'pka'],
+            'secondary': ['pass', 'launch', 'avglen', 'cmp', 'throw'],
+            'defensive': ['fka', 'sweeper']
+        },
+        'LB/LWB': {
+            'primary': ['tkl', 'int', 'blocks', 'cross', 'key', 'prog'],
+            'secondary': ['touches', 'pass', 'cmp', 'carries', 'take'],
+            'defensive': ['clr', 'aerial', 'won', 'foul']
+        },
+        'RB/RWB': {
+            'primary': ['tkl', 'int', 'blocks', 'cross', 'key', 'prog'],
+            'secondary': ['touches', 'pass', 'cmp', 'carries', 'take'],
+            'defensive': ['clr', 'aerial', 'won', 'foul']
+        },
+        'CB': {
+            'primary': ['tkl', 'int', 'blocks', 'clr', 'aerial', 'won%'],
+            'secondary': ['pass', 'cmp', 'long', 'prgp'],
+            'defensive': ['err', 'foul', 'card', 'pen']
+        },
+        'CB/DM': {
+            'primary': ['tkl', 'int', 'blocks', 'pass', 'cmp'],
+            'secondary': ['clr', 'aerial', 'prgp', 'carries'],
+            'defensive': ['foul', 'card', 'err']
+        },
+        'DM': {
+            'primary': ['tkl', 'int', 'pass', 'cmp', 'prgp', 'touches'],
+            'secondary': ['blocks', 'carries', 'long', 'key'],
+            'defensive': ['foul', 'card', 'clr']
+        },
+        'CM': {
+            'primary': ['pass', 'cmp', 'prgp', 'key', 'touches', 'carries'],
+            'secondary': ['tkl', 'int', 'shot', 'gls', 'ast'],
+            'defensive': ['press', 'blocks', 'foul']
+        },
+        'AM': {
+            'primary': ['key', 'xa', 'sca', 'gca', 'pass', 'touches'],
+            'secondary': ['gls', 'shot', 'ast', 'carries', 'prgc'],
+            'defensive': ['press', 'tkl']
+        },
+        'AM/W': {
+            'primary': ['key', 'xa', 'sca', 'shot', 'gls', 'take'],
+            'secondary': ['cross', 'carries', 'touches', 'ast'],
+            'defensive': ['press', 'tkl']
+        },
+        'LW/LM': {
+            'primary': ['shot', 'gls', 'xa', 'take', 'cross', 'key'],
+            'secondary': ['touches', 'carries', 'prgc', 'ast', 'sca'],
             'defensive': ['press', 'tkl', 'int']
         },
-        'MF': {
-            'primary': ['pass', 'cmp', 'prgp', 'key', 'xa', 'sca', 'carries', 'prgc'],
-            'secondary': ['gls', 'xg', 'shot', 'ast', 'touches', 'take-on'],
-            'defensive': ['tkl', 'int', 'blocks', 'press']
+        'RW/RM': {
+            'primary': ['shot', 'gls', 'xa', 'take', 'cross', 'key'],
+            'secondary': ['touches', 'carries', 'prgc', 'ast', 'sca'],
+            'defensive': ['press', 'tkl', 'int']
         },
-        'DF': {
-            'primary': ['tkl', 'int', 'blocks', 'clr', 'aerial', 'won%'],
-            'secondary': ['pass', 'cmp', 'prgp', 'carries'],
-            'defensive': ['err', 'foul', 'card']
+        'ST/CF': {
+            'primary': ['gls', 'xg', 'shot', 'sot', 'g/sh', 'npxg'],
+            'secondary': ['touches', 'ast', 'xa', 'aerial', 'won'],
+            'defensive': ['press', 'foul']
         },
-        'GK': {
-            'primary': ['save', 'saves%', 'clean', 'psxg', 'sota'],
-            'secondary': ['pass', 'launch', 'avglen'],
-            'defensive': ['pka', 'fka']
+        'FW': {
+            'primary': ['gls', 'xg', 'shot', 'sot', 'ast', 'xa'],
+            'secondary': ['touches', 'key', 'sca', 'gca', 'take'],
+            'defensive': ['press', 'tkl']
         }
     }
     
-    # Default to midfielder metrics if position not found
+    # If position not found, default to CM (most balanced)
     if position not in position_metrics:
-        position = 'MF'
+        if 'Unknown' in position:
+            position = 'CM'  # Default for unknown positions
+        else:
+            # Try to find a close match
+            for key in position_metrics.keys():
+                if key in position or position in key:
+                    position = key
+                    break
+            else:
+                position = 'CM'
     
     selected_metrics = []
     
