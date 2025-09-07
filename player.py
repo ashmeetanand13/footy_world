@@ -607,24 +607,34 @@ def main():
     # Add minimum minutes filter
     st.sidebar.markdown("### Playing Time Filter")
     
-    # Find the minutes column - look for various possible column names
-    possible_minutes_cols = [col for col in players_df.columns if 
-                            any(keyword in col.lower() for keyword in ['90s', 'minutes', 'min', 'mp'])
-                            and not any(exclude in col.lower() for exclude in ['per', 'avg', '%'])]
-    
-    if possible_minutes_cols:
-        # Use the first matching column
-        minutes_col = possible_minutes_cols[0]
+    # Look specifically for the "Playing Time Min" column first
+    minutes_col = None
+    if 'Playing Time Min' in players_df.columns:
+        minutes_col = 'Playing Time Min'
+    else:
+        # Fallback to searching for other minutes columns
+        possible_minutes_cols = [col for col in players_df.columns if 
+                                any(keyword in col.lower() for keyword in ['minutes', 'min', 'mp', '90s'])
+                                and 'playing' in col.lower()]
+        if not possible_minutes_cols:
+            # Broader search if no "playing" columns found
+            possible_minutes_cols = [col for col in players_df.columns if 
+                                    any(keyword in col.lower() for keyword in ['90s', 'minutes', 'min', 'mp'])
+                                    and not any(exclude in col.lower() for exclude in ['per', 'avg', '%'])]
         
+        if possible_minutes_cols:
+            minutes_col = possible_minutes_cols[0]
+    
+    if minutes_col:
         # Debug info
         st.sidebar.caption(f"Using column: {minutes_col}")
         
-        # Calculate actual minutes
+        # Calculate actual minutes based on column type
         if '90s' in minutes_col.lower() or '90' in minutes_col:
             # Column is in 90s, multiply by 90 to get actual minutes
             players_df['Total_Minutes'] = players_df[minutes_col] * 90
         else:
-            # Column is already in minutes
+            # Column is already in minutes (like "Playing Time Min")
             players_df['Total_Minutes'] = players_df[minutes_col]
         
         # Clean the data - remove NaN and ensure positive values
@@ -666,12 +676,12 @@ def main():
             st.sidebar.warning("Could not calculate valid minutes range")
             min_minutes_filter = 0
     else:
-        st.sidebar.warning("Minutes/90s column not found - showing all players")
+        st.sidebar.warning("'Playing Time Min' column not found - showing all players")
         min_minutes_filter = 0
         # List available columns for debugging
-        st.sidebar.caption("Available columns:")
-        numeric_cols = [col for col in players_df.select_dtypes(include=['number']).columns][:5]
-        for col in numeric_cols:
+        st.sidebar.caption("Available columns (first 10):")
+        cols_sample = [col for col in players_df.columns][:10]
+        for col in cols_sample:
             st.sidebar.caption(f"- {col}")
     
     st.sidebar.markdown("---")
