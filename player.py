@@ -514,7 +514,52 @@ def main():
     # Filter options
     st.sidebar.markdown("## Filters")
     
-    # Get unique values
+    # Add minimum minutes filter
+    st.sidebar.markdown("### Playing Time Filter")
+    
+    # Find the minutes column
+    minutes_cols = [col for col in players_df.columns if any(keyword in col.lower() for keyword in ['90s', '90', 'minutes', 'min', 'mp'])]
+    
+    if minutes_cols:
+        minutes_col = minutes_cols[0]
+        
+        # Calculate actual minutes (if column is in 90s, multiply by 90)
+        if '90s' in minutes_col.lower():
+            players_df['Total_Minutes'] = players_df[minutes_col] * 90
+        else:
+            players_df['Total_Minutes'] = players_df[minutes_col]
+        
+        # Get min and max for the slider
+        min_minutes = int(players_df['Total_Minutes'].min())
+        max_minutes = int(players_df['Total_Minutes'].max())
+        
+        # Default to 450 minutes (5 full matches) as minimum
+        default_min = min(450, max_minutes // 2)
+        
+        min_minutes_filter = st.sidebar.slider(
+            "Minimum Minutes Played",
+            min_value=min_minutes,
+            max_value=max_minutes,
+            value=default_min,
+            step=90,
+            help="Filter out players with less than this many minutes played. 90 minutes = 1 full match"
+        )
+        
+        # Show equivalent matches
+        st.sidebar.caption(f"≈ {min_minutes_filter / 90:.1f} full matches")
+        
+        # Apply the filter
+        players_df = players_df[players_df['Total_Minutes'] >= min_minutes_filter]
+        
+        # Show how many players remain after filtering
+        st.sidebar.info(f"Players shown: {len(players_df):,}")
+    else:
+        st.sidebar.warning("Minutes data not found - showing all players")
+        min_minutes_filter = 0
+    
+    st.sidebar.markdown("---")
+    
+    # Get unique values after filtering
     positions = sorted(players_df['Primary_Position'].dropna().unique())
     competitions = sorted(players_df['Competition'].dropna().unique())
     seasons = sorted(players_df['Season'].dropna().unique(), reverse=True)
