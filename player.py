@@ -871,7 +871,7 @@ def main():
                 position_metrics = get_position_metrics(selected_pos, available_cols)
                 
                 # Compare with top 3
-                for idx, similar_player_row in similar_players.head(3).iterrows():
+                for idx, (row_idx, similar_player_row) in enumerate(similar_players.head(3).iterrows()):
                     similar_player_name = similar_player_row['Player']
                     similarity_score = similar_player_row['Similarity %']
                     
@@ -914,11 +914,11 @@ def main():
                                             st.markdown(f"➖ {metric_name}: {diff:+.2f}")
                         
                         with col2:
-                            # Mini radar chart
+                            # Mini radar chart with unique key
                             mini_radar = create_radar_chart(player_data, similar_data, position_metrics[:8])
                             if mini_radar:
                                 mini_radar.update_layout(height=300, showlegend=False)
-                                st.plotly_chart(mini_radar, use_container_width=True)
+                                st.plotly_chart(mini_radar, use_container_width=True, key=f"similar_player_radar_{idx}")
             else:
                 st.warning("No similar players found. Try adjusting the filters.")
     
