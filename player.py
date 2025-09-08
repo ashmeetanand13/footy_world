@@ -923,6 +923,7 @@ def main():
                 
                 # Display metrics in columns
                 metrics_to_display = position_metrics[:12]
+                if metrics_to_display:  # ← Add this check
                 
                 for i in range(0, len(metrics_to_display), 3):
                     cols = st.columns(3)
