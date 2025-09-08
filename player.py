@@ -84,6 +84,9 @@ st.markdown("""
         background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
         color: white;
     }
+    .element-container {
+    min-height: 200px;  /* ← Controls minimum white box height */
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -411,7 +414,7 @@ def create_radar_chart(player1_data, player2_data, metrics, percentiles1=None, p
             )
         ),
         showlegend=True,
-        height=100,
+        height=700,
         template="plotly_white"
     )
     
