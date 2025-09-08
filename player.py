@@ -84,9 +84,7 @@ st.markdown("""
         background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
         color: white;
     }
-    .element-container {
-    min-height: 200px;  /* ← Controls minimum white box height */
-    }
+
 </style>
 """, unsafe_allow_html=True)
 
