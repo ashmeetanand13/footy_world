@@ -922,12 +922,32 @@ def main():
                 st.markdown("### Key Performance Metrics (Per 90 Minutes)")
                 
                 # Display metrics in columns
+                metrics_to_display = [m for m in position_metrics[:12] if m in player_data.index]
+                
                 if metrics_to_display:
                     for i in range(0, len(metrics_to_display), 3):
                         cols = st.columns(3)
-                        # rest of your existing code here
-                 else:
-                    st.info("No metrics available to display")
+                        for j, col in enumerate(cols):
+                            if i + j < len(metrics_to_display):
+                                metric = metrics_to_display[i + j]
+                                value = player_data[metric]
+                                pct = percentiles.get(metric, 50)
+                                
+                                # Color based on percentile
+                                delta_color = "normal"
+                                if pct >= 75:
+                                    delta_color = "normal"
+                                elif pct <= 25:
+                                    delta_color = "inverse"
+                                
+                                col.metric(
+                                    metric.replace(' Per 90', '').replace('Performance ', ''),
+                                    f"{value:.2f}",
+                                    f"{pct:.0f}%ile",
+                                    delta_color=delta_color
+                                )
+                else:
+                    st.info("No performance metrics available for this player")
             
             with tabs[1]:
                 # Percentile rankings chart
