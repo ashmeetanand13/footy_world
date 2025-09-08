@@ -924,16 +924,16 @@ def main():
                 # Display metrics in columns
                 metrics_to_display = [m for m in position_metrics[:12] if m in player_data.index]
                 
-                st.write("🔍 DEBUG INFO:")
-                st.write(f"Position metrics found: {len(position_metrics)}")
-                st.write(f"Metrics to display: {len(metrics_to_display)}")
-                st.write(f"Available 'Per 90' columns: {len([col for col in players_df.columns if 'Per 90' in col])}")
-                if position_metrics:
-                    st.write(f"First 5 position metrics: {position_metrics[:5]}")
-                if metrics_to_display:
-                    st.write(f"First 5 display metrics: {metrics_to_display[:5]}")
-                else:
-                    st.write("❌ NO METRICS TO DISPLAY - This is why you see white boxes")
+                    st.write("🔍 DEBUG INFO:")
+                    st.write(f"Position metrics found: {len(position_metrics)}")
+                    st.write(f"Metrics to display: {len(metrics_to_display)}")
+                    st.write(f"Available 'Per 90' columns: {len([col for col in players_df.columns if 'Per 90' in col])}")
+                    if position_metrics:
+                        st.write(f"First 5 position metrics: {position_metrics[:5]}")
+                    if metrics_to_display:
+                        st.write(f"First 5 display metrics: {metrics_to_display[:5]}")
+                    else:
+                        st.write("❌ NO METRICS TO DISPLAY - This is why you see white boxes")
 
 
 
