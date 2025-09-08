@@ -411,7 +411,7 @@ def create_radar_chart(player1_data, player2_data, metrics, percentiles1=None, p
             )
         ),
         showlegend=True,
-        height=600,
+        height=100,
         template="plotly_white"
     )
     
